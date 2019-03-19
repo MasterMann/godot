@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -127,7 +127,7 @@ void MeshLibraryEditor::_import_scene(Node *p_scene, Ref<MeshLibrary> p_library,
 						continue;
 					MeshLibrary::ShapeData shape_data;
 					shape_data.shape = collision;
-					shape_data.local_transform = sb->shape_owner_get_transform(E->get());
+					shape_data.local_transform = sb->get_transform() * sb->shape_owner_get_transform(E->get());
 					collisions.push_back(shape_data);
 				}
 			}
@@ -136,17 +136,20 @@ void MeshLibraryEditor::_import_scene(Node *p_scene, Ref<MeshLibrary> p_library,
 		p_library->set_item_shapes(id, collisions);
 
 		Ref<NavigationMesh> navmesh;
+		Transform navmesh_transform;
 		for (int j = 0; j < mi->get_child_count(); j++) {
 			Node *child2 = mi->get_child(j);
 			if (!Object::cast_to<NavigationMeshInstance>(child2))
 				continue;
 			NavigationMeshInstance *sb = Object::cast_to<NavigationMeshInstance>(child2);
 			navmesh = sb->get_navigation_mesh();
+			navmesh_transform = sb->get_transform();
 			if (!navmesh.is_null())
 				break;
 		}
 		if (!navmesh.is_null()) {
 			p_library->set_item_navmesh(id, navmesh);
+			p_library->set_item_navmesh_transform(id, navmesh_transform);
 		}
 	}
 

@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -776,7 +776,7 @@ Error VisualServer::_surface_set_data(Array p_arrays, uint32_t p_format, uint32_
 						continue; //break;
 					ERR_FAIL_INDEX_V(idx, total_bones, ERR_INVALID_DATA);
 
-					if (bptr->size.x < 0) {
+					if (bptr[idx].size.x < 0) {
 						//first
 						bptr[idx] = AABB(v, SMALL_VEC3);
 						any_valid = true;
@@ -1163,11 +1163,11 @@ void VisualServer::mesh_add_surface_from_arrays(RID p_mesh, PrimitiveType p_prim
 		PoolVector<uint8_t> noindex;
 
 		AABB laabb;
-		Error err = _surface_set_data(p_blend_shapes[i], format & ~ARRAY_FORMAT_INDEX, offsets, total_elem_size, vertex_array_shape, array_len, noindex, 0, laabb, bone_aabb);
+		Error err2 = _surface_set_data(p_blend_shapes[i], format & ~ARRAY_FORMAT_INDEX, offsets, total_elem_size, vertex_array_shape, array_len, noindex, 0, laabb, bone_aabb);
 		aabb.merge_with(laabb);
-		if (err) {
+		if (err2) {
 			ERR_EXPLAIN("Invalid blend shape array format for surface");
-			ERR_FAIL_COND(err != OK);
+			ERR_FAIL_COND(err2 != OK);
 		}
 
 		blend_shape_data.push_back(vertex_array_shape);
@@ -2260,6 +2260,9 @@ void VisualServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(MULTIMESH_COLOR_NONE);
 	BIND_ENUM_CONSTANT(MULTIMESH_COLOR_8BIT);
 	BIND_ENUM_CONSTANT(MULTIMESH_COLOR_FLOAT);
+	BIND_ENUM_CONSTANT(MULTIMESH_CUSTOM_DATA_NONE);
+	BIND_ENUM_CONSTANT(MULTIMESH_CUSTOM_DATA_8BIT);
+	BIND_ENUM_CONSTANT(MULTIMESH_CUSTOM_DATA_FLOAT);
 
 	BIND_ENUM_CONSTANT(REFLECTION_PROBE_UPDATE_ONCE);
 	BIND_ENUM_CONSTANT(REFLECTION_PROBE_UPDATE_ALWAYS);
@@ -2365,11 +2368,11 @@ VisualServer::VisualServer() {
 	//ERR_FAIL_COND(singleton);
 	singleton = this;
 
-	GLOBAL_DEF("rendering/vram_compression/import_bptc", false);
-	GLOBAL_DEF("rendering/vram_compression/import_s3tc", true);
-	GLOBAL_DEF("rendering/vram_compression/import_etc", false);
-	GLOBAL_DEF("rendering/vram_compression/import_etc2", true);
-	GLOBAL_DEF("rendering/vram_compression/import_pvrtc", false);
+	GLOBAL_DEF_RST("rendering/vram_compression/import_bptc", false);
+	GLOBAL_DEF_RST("rendering/vram_compression/import_s3tc", true);
+	GLOBAL_DEF_RST("rendering/vram_compression/import_etc", false);
+	GLOBAL_DEF_RST("rendering/vram_compression/import_etc2", true);
+	GLOBAL_DEF_RST("rendering/vram_compression/import_pvrtc", false);
 
 	GLOBAL_DEF("rendering/quality/directional_shadow/size", 4096);
 	GLOBAL_DEF("rendering/quality/directional_shadow/size.mobile", 2048);
@@ -2403,7 +2406,7 @@ VisualServer::VisualServer() {
 	GLOBAL_DEF("rendering/quality/shading/force_blinn_over_ggx.mobile", true);
 
 	GLOBAL_DEF("rendering/quality/depth_prepass/enable", true);
-	GLOBAL_DEF("rendering/quality/depth_prepass/disable_for_vendors", "PowerVR,Mali,Adreno");
+	GLOBAL_DEF("rendering/quality/depth_prepass/disable_for_vendors", "PowerVR,Mali,Adreno,Apple");
 
 	GLOBAL_DEF("rendering/quality/filters/use_nearest_mipmap_filter", false);
 }

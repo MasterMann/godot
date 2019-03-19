@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -50,7 +50,7 @@
 #define _WIN32_WINNT 0x0501 // Windows XP, disable Vista API
 #include <iphlpapi.h>
 #undef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600 // Reenable Vista API
+#define _WIN32_WINNT 0x0600 // Re-enable Vista API
 #else
 #include <iphlpapi.h>
 #endif // MINGW hack

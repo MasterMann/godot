@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -549,16 +549,17 @@ void TextEdit::_notification(int p_what) {
 				MessageQueue::get_singleton()->push_call(this, "_cursor_changed_emit");
 			if (text_changed_dirty)
 				MessageQueue::get_singleton()->push_call(this, "_text_changed_emit");
-			update_wrap_at();
+			_update_wrap_at();
 		} break;
 		case NOTIFICATION_RESIZED: {
 
 			_update_scrollbars();
-			update_wrap_at();
+			call_deferred("_update_wrap_at");
 		} break;
 		case NOTIFICATION_THEME_CHANGED: {
 
 			_update_caches();
+			_update_wrap_at();
 		} break;
 		case MainLoop::NOTIFICATION_WM_FOCUS_IN: {
 			window_has_focus = true;
@@ -665,7 +666,7 @@ void TextEdit::_notification(int p_what) {
 			bool brace_close_matching = false;
 			bool brace_close_mismatch = false;
 
-			if (brace_matching_enabled) {
+			if (brace_matching_enabled && cursor.line >= 0 && cursor.line < text.size() && cursor.column >= 0) {
 
 				if (cursor.column < text[cursor.line].length()) {
 					//check for open
@@ -802,6 +803,7 @@ void TextEdit::_notification(int p_what) {
 			}
 
 			Point2 cursor_pos;
+			int cursor_insert_offset_y = 0;
 
 			// get the highlighted words
 			String highlighted_text = get_selection_text();
@@ -859,6 +861,9 @@ void TextEdit::_notification(int p_what) {
 
 					const String &str = wrap_rows[line_wrap_index];
 					int indent_px = line_wrap_index != 0 ? get_indent_level(line) * cache.font->get_char_size(' ').width : 0;
+					if (indent_px >= wrap_at) {
+						indent_px = 0;
+					}
 
 					if (line_wrap_index > 0)
 						last_wrap_column += wrap_rows[line_wrap_index - 1].length();
@@ -1111,7 +1116,8 @@ void TextEdit::_notification(int p_what) {
 							cursor_pos.y += (get_row_height() - cache.font->get_height()) / 2;
 
 							if (insert_mode) {
-								cursor_pos.y += (cache.font->get_height() - 3);
+								cursor_insert_offset_y = (cache.font->get_height() - 3);
+								cursor_pos.y += cursor_insert_offset_y;
 							}
 
 							int caret_w = (str[j] == '\t') ? cache.font->get_char_size(' ').width : char_w;
@@ -1203,7 +1209,8 @@ void TextEdit::_notification(int p_what) {
 						cursor_pos.y += (get_row_height() - cache.font->get_height()) / 2;
 
 						if (insert_mode) {
-							cursor_pos.y += (cache.font->get_height() - 3);
+							cursor_insert_offset_y = cache.font->get_height() - 3;
+							cursor_pos.y += cursor_insert_offset_y;
 						}
 						if (ime_text.length() > 0) {
 							int ofs = 0;
@@ -1291,9 +1298,9 @@ void TextEdit::_notification(int p_what) {
 				int th = h + csb->get_minimum_size().y;
 
 				if (cursor_pos.y + get_row_height() + th > get_size().height) {
-					completion_rect.position.y = cursor_pos.y - th;
+					completion_rect.position.y = cursor_pos.y - th - (cache.line_spacing / 2.0f) - cursor_insert_offset_y;
 				} else {
-					completion_rect.position.y = cursor_pos.y + get_row_height() + csb->get_offset().y - cache.font->get_height();
+					completion_rect.position.y = cursor_pos.y + cache.font->get_height() + (cache.line_spacing / 2.0f) + csb->get_offset().y - cursor_insert_offset_y;
 					completion_below = true;
 				}
 
@@ -1377,8 +1384,8 @@ void TextEdit::_notification(int p_what) {
 					}
 				}
 
-				Size2 size = Size2(max_w, sc * font->get_height() + spacing);
-				Size2 minsize = size + sb->get_minimum_size();
+				Size2 size2 = Size2(max_w, sc * font->get_height() + spacing);
+				Size2 minsize = size2 + sb->get_minimum_size();
 
 				if (completion_hint_offset == -0xFFFF) {
 					completion_hint_offset = cursor_pos.x - offset;
@@ -1445,9 +1452,11 @@ void TextEdit::_notification(int p_what) {
 		} break;
 		case MainLoop::NOTIFICATION_OS_IME_UPDATE: {
 
-			ime_text = OS::get_singleton()->get_ime_text();
-			ime_selection = OS::get_singleton()->get_ime_selection();
-			update();
+			if (has_focus()) {
+				ime_text = OS::get_singleton()->get_ime_text();
+				ime_selection = OS::get_singleton()->get_ime_selection();
+				update();
+			}
 		} break;
 	}
 }
@@ -1708,10 +1717,10 @@ void TextEdit::_get_mouse_pos(const Point2i &p_mouse, int &r_row, int &r_col) co
 		col = get_char_pos_for_line(colx, row, wrap_index);
 		if (is_wrap_enabled() && wrap_index < times_line_wraps(row)) {
 			// move back one if we are at the end of the row
-			Vector<String> rows = get_wrap_rows_text(row);
+			Vector<String> rows2 = get_wrap_rows_text(row);
 			int row_end_col = 0;
 			for (int i = 0; i < wrap_index + 1; i++) {
-				row_end_col += rows[i].length();
+				row_end_col += rows2[i].length();
 			}
 			if (col >= row_end_col)
 				col -= 1;
@@ -2196,10 +2205,7 @@ void TextEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 		bool had_selection = selection.active;
 
 		// stuff to do when selection is active..
-		if (selection.active) {
-
-			if (readonly)
-				return;
+		if (!readonly && selection.active) {
 
 			bool clear = false;
 			bool unselect = false;
@@ -2639,24 +2645,26 @@ void TextEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 			}
 			case KEY_UP: {
 
-				if (k->get_shift())
-					_pre_shift_selection();
 				if (k->get_alt()) {
 					scancode_handled = false;
 					break;
 				}
 #ifndef APPLE_STYLE_KEYS
 				if (k->get_command()) {
-					_scroll_lines_up();
-					break;
-				}
 #else
 				if (k->get_command() && k->get_alt()) {
+#endif
 					_scroll_lines_up();
 					break;
 				}
 
+				if (k->get_shift()) {
+					_pre_shift_selection();
+				}
+
+#ifdef APPLE_STYLE_KEYS
 				if (k->get_command()) {
+
 					cursor_set_line(0);
 				} else
 #endif
@@ -2690,24 +2698,24 @@ void TextEdit::_gui_input(const Ref<InputEvent> &p_gui_input) {
 			}
 			case KEY_DOWN: {
 
-				if (k->get_shift())
-					_pre_shift_selection();
 				if (k->get_alt()) {
 					scancode_handled = false;
 					break;
 				}
 #ifndef APPLE_STYLE_KEYS
 				if (k->get_command()) {
-					_scroll_lines_down();
-					break;
-				}
-
 #else
 				if (k->get_command() && k->get_alt()) {
+#endif
 					_scroll_lines_down();
 					break;
 				}
 
+				if (k->get_shift()) {
+					_pre_shift_selection();
+				}
+
+#ifdef APPLE_STYLE_KEYS
 				if (k->get_command()) {
 					cursor_set_line(get_last_unhidden_line(), true, false, 9999);
 				} else
@@ -3255,7 +3263,6 @@ void TextEdit::_scroll_down(real_t p_delta) {
 		int max_v_scroll = round(v_scroll->get_max() - v_scroll->get_page());
 		if (target_v_scroll > max_v_scroll) {
 			target_v_scroll = max_v_scroll;
-			v_scroll->set_value(target_v_scroll);
 		}
 		if (Math::abs(target_v_scroll - v_scroll->get_value()) < 1.0) {
 			v_scroll->set_value(target_v_scroll);
@@ -3368,20 +3375,20 @@ void TextEdit::_base_insert_text(int p_line, int p_char, const String &p_text, i
 	String preinsert_text = text[p_line].substr(0, p_char);
 	String postinsert_text = text[p_line].substr(p_char, text[p_line].size());
 
-	for (int i = 0; i < substrings.size(); i++) {
+	for (int j = 0; j < substrings.size(); j++) {
 		//insert the substrings
 
-		if (i == 0) {
+		if (j == 0) {
 
-			text.set(p_line, preinsert_text + substrings[i]);
+			text.set(p_line, preinsert_text + substrings[j]);
 		} else {
 
-			text.insert(p_line + i, substrings[i]);
+			text.insert(p_line + j, substrings[j]);
 		}
 
-		if (i == substrings.size() - 1) {
+		if (j == substrings.size() - 1) {
 
-			text.set(p_line + i, text[p_line + i] + postinsert_text);
+			text.set(p_line + j, text[p_line + j] + postinsert_text);
 		}
 	}
 
@@ -3640,7 +3647,7 @@ int TextEdit::get_total_visible_rows() const {
 	return total_rows;
 }
 
-void TextEdit::update_wrap_at() {
+void TextEdit::_update_wrap_at() {
 
 	wrap_at = get_size().width - cache.style_normal->get_minimum_size().width - cache.line_number_w - cache.breakpoint_gutter_width - cache.fold_gutter_width - wrap_right_offset;
 	update_cursor_wrap_offset();
@@ -3784,6 +3791,9 @@ Vector<String> TextEdit::get_wrap_rows_text(int p_line) const {
 	int cur_wrap_index = 0;
 
 	int tab_offset_px = get_indent_level(p_line) * cache.font->get_char_size(' ').width;
+	if (tab_offset_px >= wrap_at) {
+		tab_offset_px = 0;
+	}
 
 	while (col < line_text.length()) {
 		CharType c = line_text[col];
@@ -3791,30 +3801,36 @@ Vector<String> TextEdit::get_wrap_rows_text(int p_line) const {
 
 		int indent_ofs = (cur_wrap_index != 0 ? tab_offset_px : 0);
 
-		word_str += c;
-		word_px += w;
-		if (c == ' ') {
-			// end of a word; add this word to the substring
+		if (indent_ofs + word_px + w > wrap_at) {
+			// not enough space to add this char; start next line
 			wrap_substring += word_str;
-			px += word_px;
-			word_str = "";
-			word_px = 0;
-		}
+			lines.push_back(wrap_substring);
+			cur_wrap_index++;
+			wrap_substring = "";
+			px = 0;
 
-		if ((indent_ofs + px + word_px) > wrap_at) {
-			// do not want to add this word
-			if (indent_ofs + word_px > wrap_at) {
-				// not enough space; add it anyway
+			word_str = "";
+			word_str += c;
+			word_px = w;
+		} else {
+			word_str += c;
+			word_px += w;
+			if (c == ' ') {
+				// end of a word; add this word to the substring
 				wrap_substring += word_str;
 				px += word_px;
 				word_str = "";
 				word_px = 0;
 			}
-			lines.push_back(wrap_substring);
-			// reset for next wrap
-			cur_wrap_index++;
-			wrap_substring = "";
-			px = 0;
+
+			if (indent_ofs + px + word_px > wrap_at) {
+				// this word will be moved to the next line
+				lines.push_back(wrap_substring);
+				// reset for next wrap
+				cur_wrap_index++;
+				wrap_substring = "";
+				px = 0;
+			}
 		}
 		col++;
 	}
@@ -4027,6 +4043,9 @@ int TextEdit::get_char_pos_for_line(int p_px, int p_line, int p_wrap_index) cons
 
 		int line_wrap_amount = times_line_wraps(p_line);
 		int wrap_offset_px = get_indent_level(p_line) * cache.font->get_char_size(' ').width;
+		if (wrap_offset_px >= wrap_at) {
+			wrap_offset_px = 0;
+		}
 		if (p_wrap_index > line_wrap_amount)
 			p_wrap_index = line_wrap_amount;
 		if (p_wrap_index > 0)
@@ -4068,6 +4087,9 @@ int TextEdit::get_column_x_offset_for_line(int p_char, int p_line) const {
 		int px = get_column_x_offset(n_char, rows[wrap_index]);
 
 		int wrap_offset_px = get_indent_level(p_line) * cache.font->get_char_size(' ').width;
+		if (wrap_offset_px >= wrap_at) {
+			wrap_offset_px = 0;
+		}
 		if (wrap_index != 0)
 			px += wrap_offset_px;
 
@@ -6088,6 +6110,7 @@ void TextEdit::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_click_selection_held"), &TextEdit::_click_selection_held);
 	ClassDB::bind_method(D_METHOD("_toggle_draw_caret"), &TextEdit::_toggle_draw_caret);
 	ClassDB::bind_method(D_METHOD("_v_scroll_input"), &TextEdit::_v_scroll_input);
+	ClassDB::bind_method(D_METHOD("_update_wrap_at"), &TextEdit::_update_wrap_at);
 
 	BIND_ENUM_CONSTANT(SEARCH_MATCH_CASE);
 	BIND_ENUM_CONSTANT(SEARCH_WHOLE_WORDS);

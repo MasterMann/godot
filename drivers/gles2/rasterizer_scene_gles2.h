@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -103,6 +103,7 @@ public:
 		GLuint sky_verts;
 
 		GLuint immediate_buffer;
+		Color default_ambient;
 
 		// ResolveShaderGLES3 resolve_shader;
 		// ScreenSpaceReflectionShaderGLES3 ssr_shader;
@@ -255,6 +256,7 @@ public:
 
 		GLuint fbo;
 		GLuint depth;
+		GLuint color;
 
 		Map<RID, uint32_t> shadow_owners;
 	};
@@ -278,6 +280,7 @@ public:
 	struct DirectionalShadow {
 		GLuint fbo;
 		GLuint depth;
+		GLuint color;
 
 		int light_count;
 		int size;
@@ -310,10 +313,9 @@ public:
 		int reflection_index;
 
 		GLuint fbo[6];
-		GLuint cubemap;
+		GLuint color[6];
 		GLuint depth;
-
-		GLuint fbo_blur;
+		GLuint cubemap;
 
 		int current_resolution;
 		mutable bool dirty;
@@ -473,6 +475,7 @@ public:
 	virtual void light_instance_set_transform(RID p_light_instance, const Transform &p_transform);
 	virtual void light_instance_set_shadow_transform(RID p_light_instance, const CameraMatrix &p_projection, const Transform &p_transform, float p_far, float p_split, int p_pass, float p_bias_scale = 1.0);
 	virtual void light_instance_mark_visible(RID p_light_instance);
+	virtual bool light_instances_can_render_shadow_cube() const { return storage->config.support_shadow_cubemaps; }
 
 	LightInstance **render_light_instances;
 	int render_directional_lights;

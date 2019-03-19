@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -273,18 +273,12 @@ void ScriptTextEditor::_set_theme_for_script() {
 	}
 }
 
-void ScriptTextEditor::_toggle_warning_pannel(const Ref<InputEvent> &p_event) {
-	Ref<InputEventMouseButton> mb = p_event;
-	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
-		warnings_panel->set_visible(!warnings_panel->is_visible());
-	}
+void ScriptTextEditor::_show_warnings_panel(bool p_show) {
+	warnings_panel->set_visible(p_show);
 }
 
-void ScriptTextEditor::_error_pressed(const Ref<InputEvent> &p_event) {
-	Ref<InputEventMouseButton> mb = p_event;
-	if (mb.is_valid() && mb->is_pressed() && mb->get_button_index() == BUTTON_LEFT) {
-		code_editor->goto_error();
-	}
+void ScriptTextEditor::_error_pressed() {
+	code_editor->goto_error();
 }
 
 void ScriptTextEditor::_warning_clicked(Variant p_line) {
@@ -468,7 +462,7 @@ void ScriptTextEditor::_validate_script() {
 		}
 	}
 
-	code_editor->get_warning_count_label()->set_text(itos(warnings.size()));
+	code_editor->set_warning_nb(warnings.size());
 	warnings_panel->clear();
 	warnings_panel->push_table(3);
 	for (List<ScriptLanguage::Warning>::Element *E = warnings.front(); E; E = E->next()) {
@@ -626,7 +620,9 @@ void ScriptTextEditor::_lookup_symbol(const String &p_symbol, int p_row, int p_c
 	}
 
 	ScriptLanguage::LookupResult result;
-	if (p_symbol.is_resource_file()) {
+	if (ScriptServer::is_global_class(p_symbol)) {
+		EditorNode::get_singleton()->load_resource(ScriptServer::get_global_class_path(p_symbol));
+	} else if (p_symbol.is_resource_file()) {
 		List<String> scene_extensions;
 		ResourceLoader::get_recognized_extensions_for_type("PackedScene", &scene_extensions);
 
@@ -800,92 +796,7 @@ void ScriptTextEditor::_edit_option(int p_op) {
 		} break;
 		case EDIT_TOGGLE_COMMENT: {
 
-			Ref<Script> scr = script;
-			if (scr.is_null())
-				return;
-
-			String delimiter = "#";
-			List<String> comment_delimiters;
-			scr->get_language()->get_comment_delimiters(&comment_delimiters);
-
-			for (List<String>::Element *E = comment_delimiters.front(); E; E = E->next()) {
-				String script_delimiter = E->get();
-				if (script_delimiter.find(" ") == -1) {
-					delimiter = script_delimiter;
-					break;
-				}
-			}
-
-			tx->begin_complex_operation();
-			if (tx->is_selection_active()) {
-				int begin = tx->get_selection_from_line();
-				int end = tx->get_selection_to_line();
-
-				// End of selection ends on the first column of the last line, ignore it.
-				if (tx->get_selection_to_column() == 0)
-					end -= 1;
-
-				int col_to = tx->get_selection_to_column();
-				int cursor_pos = tx->cursor_get_column();
-
-				// Check if all lines in the selected block are commented
-				bool is_commented = true;
-				for (int i = begin; i <= end; i++) {
-					if (!tx->get_line(i).begins_with(delimiter)) {
-						is_commented = false;
-						break;
-					}
-				}
-				for (int i = begin; i <= end; i++) {
-					String line_text = tx->get_line(i);
-
-					if (line_text.strip_edges().empty()) {
-						line_text = delimiter;
-					} else {
-						if (is_commented) {
-							line_text = line_text.substr(delimiter.length(), line_text.length());
-						} else {
-							line_text = delimiter + line_text;
-						}
-					}
-					tx->set_line(i, line_text);
-				}
-
-				// Adjust selection & cursor position.
-				int offset = is_commented ? -1 : 1;
-				int col_from = tx->get_selection_from_column() > 0 ? tx->get_selection_from_column() + offset : 0;
-
-				if (is_commented && tx->cursor_get_column() == tx->get_line(tx->cursor_get_line()).length() + 1)
-					cursor_pos += 1;
-
-				if (tx->get_selection_to_column() != 0 && col_to != tx->get_line(tx->get_selection_to_line()).length() + 1)
-					col_to += offset;
-
-				if (tx->cursor_get_column() != 0)
-					cursor_pos += offset;
-
-				tx->select(begin, col_from, tx->get_selection_to_line(), col_to);
-				tx->cursor_set_column(cursor_pos);
-
-			} else {
-				int begin = tx->cursor_get_line();
-				String line_text = tx->get_line(begin);
-
-				int col = tx->cursor_get_column();
-				if (line_text.begins_with(delimiter)) {
-					line_text = line_text.substr(delimiter.length(), line_text.length());
-					col -= 1;
-				} else {
-					line_text = delimiter + line_text;
-					col += 1;
-				}
-
-				tx->set_line(begin, line_text);
-				tx->cursor_set_column(col);
-			}
-			tx->end_complex_operation();
-			tx->update();
-
+			_edit_option_toggle_inline_comment();
 		} break;
 		case EDIT_COMPLETE: {
 
@@ -1072,6 +983,25 @@ void ScriptTextEditor::_edit_option(int p_op) {
 	}
 }
 
+void ScriptTextEditor::_edit_option_toggle_inline_comment() {
+	if (script.is_null())
+		return;
+
+	String delimiter = "#";
+	List<String> comment_delimiters;
+	script->get_language()->get_comment_delimiters(&comment_delimiters);
+
+	for (List<String>::Element *E = comment_delimiters.front(); E; E = E->next()) {
+		String script_delimiter = E->get();
+		if (script_delimiter.find(" ") == -1) {
+			delimiter = script_delimiter;
+			break;
+		}
+	}
+
+	code_editor->toggle_inline_comment(delimiter);
+}
+
 void ScriptTextEditor::add_syntax_highlighter(SyntaxHighlighter *p_highlighter) {
 	highlighters[p_highlighter->get_name()] = p_highlighter;
 	highlighter_menu->add_radio_check_item(p_highlighter->get_name());
@@ -1107,7 +1037,7 @@ void ScriptTextEditor::_bind_methods() {
 	ClassDB::bind_method("_goto_line", &ScriptTextEditor::_goto_line);
 	ClassDB::bind_method("_lookup_symbol", &ScriptTextEditor::_lookup_symbol);
 	ClassDB::bind_method("_text_edit_gui_input", &ScriptTextEditor::_text_edit_gui_input);
-	ClassDB::bind_method("_toggle_warning_pannel", &ScriptTextEditor::_toggle_warning_pannel);
+	ClassDB::bind_method("_show_warnings_panel", &ScriptTextEditor::_show_warnings_panel);
 	ClassDB::bind_method("_error_pressed", &ScriptTextEditor::_error_pressed);
 	ClassDB::bind_method("_warning_clicked", &ScriptTextEditor::_warning_clicked);
 	ClassDB::bind_method("_color_changed", &ScriptTextEditor::_color_changed);
@@ -1427,7 +1357,7 @@ ScriptTextEditor::ScriptTextEditor() {
 
 	code_editor = memnew(CodeTextEditor);
 	editor_box->add_child(code_editor);
-	code_editor->add_constant_override("separation", 0);
+	code_editor->add_constant_override("separation", 2);
 	code_editor->set_anchors_and_margins_preset(Control::PRESET_WIDE);
 	code_editor->connect("validate_script", this, "_validate_script");
 	code_editor->connect("load_theme_settings", this, "_load_theme_settings");
@@ -1445,9 +1375,8 @@ ScriptTextEditor::ScriptTextEditor() {
 	warnings_panel->set_focus_mode(FOCUS_CLICK);
 	warnings_panel->hide();
 
-	code_editor->get_error_label()->connect("gui_input", this, "_error_pressed");
-	code_editor->get_warning_label()->connect("gui_input", this, "_toggle_warning_pannel");
-	code_editor->get_warning_count_label()->connect("gui_input", this, "_toggle_warning_pannel");
+	code_editor->connect("error_pressed", this, "_error_pressed");
+	code_editor->connect("show_warnings_panel", this, "_show_warnings_panel");
 	warnings_panel->connect("meta_clicked", this, "_warning_clicked");
 
 	update_settings();

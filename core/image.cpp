@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -733,6 +733,10 @@ static void _overlay(const uint8_t *__restrict p_src, uint8_t *__restrict p_dst,
 
 		p_dst[i] = (p_dst[i] * (256 - alpha) + p_src[i] * alpha) >> 8;
 	}
+}
+
+bool Image::is_size_po2() const {
+	return uint32_t(width) == next_power_of_2(width) && uint32_t(height) == next_power_of_2(height);
 }
 
 void Image::resize_to_po2(bool p_square) {
@@ -1789,7 +1793,7 @@ Error Image::decompress() {
 		_image_decompress_pvrtc(this);
 	else if (format == FORMAT_ETC && _image_decompress_etc1)
 		_image_decompress_etc1(this);
-	else if (format >= FORMAT_ETC2_R11 && format <= FORMAT_ETC2_RGB8A1 && _image_decompress_etc1)
+	else if (format >= FORMAT_ETC2_R11 && format <= FORMAT_ETC2_RGB8A1 && _image_decompress_etc2)
 		_image_decompress_etc2(this);
 	else
 		return ERR_UNAVAILABLE;
@@ -2632,6 +2636,9 @@ void Image::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "_set_data", "_get_data");
 
+	BIND_CONSTANT(MAX_WIDTH);
+	BIND_CONSTANT(MAX_HEIGHT);
+
 	BIND_ENUM_CONSTANT(FORMAT_L8); //luminance
 	BIND_ENUM_CONSTANT(FORMAT_LA8); //luminance-alpha
 	BIND_ENUM_CONSTANT(FORMAT_R8);
@@ -2898,15 +2905,15 @@ void Image::fix_alpha_edges() {
 					if (dist >= closest_dist)
 						continue;
 
-					const uint8_t *rp = &srcptr[(k * width + l) << 2];
+					const uint8_t *rp2 = &srcptr[(k * width + l) << 2];
 
-					if (rp[3] < alpha_threshold)
+					if (rp2[3] < alpha_threshold)
 						continue;
 
 					closest_dist = dist;
-					closest_color[0] = rp[0];
-					closest_color[1] = rp[1];
-					closest_color[2] = rp[2];
+					closest_color[0] = rp2[0];
+					closest_color[1] = rp2[1];
+					closest_color[2] = rp2[2];
 				}
 			}
 

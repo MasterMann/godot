@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -59,8 +59,16 @@ MonoType *GDMonoClass::get_mono_type() {
 	return get_mono_type(mono_class);
 }
 
-bool GDMonoClass::is_assignable_from(GDMonoClass *p_from) const {
+uint32_t GDMonoClass::get_flags() const {
+	return mono_class_get_flags(mono_class);
+}
 
+bool GDMonoClass::is_static() const {
+	uint32_t static_class_flags = MONO_TYPE_ATTR_ABSTRACT | MONO_TYPE_ATTR_SEALED;
+	return (get_flags() & static_class_flags) == static_class_flags;
+}
+
+bool GDMonoClass::is_assignable_from(GDMonoClass *p_from) const {
 	return mono_class_is_assignable_from(mono_class, p_from->mono_class);
 }
 

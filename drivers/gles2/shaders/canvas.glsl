@@ -6,17 +6,45 @@
 #define mediump
 #define highp
 #else
-precision mediump float;
-precision mediump int;
+precision highp float;
+precision highp int;
 #endif
 
 uniform highp mat4 projection_matrix;
 /* clang-format on */
+
+#include "stdlib.glsl"
+
 uniform highp mat4 modelview_matrix;
 uniform highp mat4 extra_matrix;
 attribute highp vec2 vertex; // attrib:0
 attribute vec4 color_attrib; // attrib:3
 attribute vec2 uv_attrib; // attrib:4
+
+#ifdef USE_SKELETON
+attribute highp vec4 bone_indices; // attrib:6
+attribute highp vec4 bone_weights; // attrib:7
+#endif
+
+#ifdef USE_INSTANCING
+
+attribute highp vec4 instance_xform0; //attrib:8
+attribute highp vec4 instance_xform1; //attrib:9
+attribute highp vec4 instance_xform2; //attrib:10
+attribute highp vec4 instance_color; //attrib:11
+
+#ifdef USE_INSTANCE_CUSTOM
+attribute highp vec4 instance_custom_data; //attrib:12
+#endif
+
+#endif
+
+#ifdef USE_SKELETON
+uniform highp sampler2D skeleton_texture; // texunit:-3
+uniform highp ivec2 skeleton_texture_size;
+uniform highp mat4 skeleton_transform;
+uniform highp mat4 skeleton_transform_inverse;
+#endif
 
 varying vec2 uv_interp;
 varying vec4 color_interp;
@@ -79,6 +107,7 @@ vec2 select(vec2 a, vec2 b, bvec2 c) {
 void main() {
 
 	vec4 color = color_attrib;
+	vec2 uv;
 
 #ifdef USE_INSTANCING
 	mat4 extra_matrix_instance = extra_matrix * transpose(mat4(instance_xform0, instance_xform1, instance_xform2, vec4(0.0, 0.0, 0.0, 1.0)));
@@ -93,9 +122,9 @@ void main() {
 #ifdef USE_TEXTURE_RECT
 
 	if (dst_rect.z < 0.0) { // Transpose is encoded as negative dst_rect.z
-		uv_interp = src_rect.xy + abs(src_rect.zw) * vertex.yx;
+		uv = src_rect.xy + abs(src_rect.zw) * vertex.yx;
 	} else {
-		uv_interp = src_rect.xy + abs(src_rect.zw) * vertex;
+		uv = src_rect.xy + abs(src_rect.zw) * vertex;
 	}
 
 	vec4 outvec = vec4(0.0, 0.0, 0.0, 1.0);
@@ -112,7 +141,7 @@ void main() {
 #else
 	vec4 outvec = vec4(vertex.xy, 0.0, 1.0);
 
-	uv_interp = uv_attrib;
+	uv = uv_attrib;
 #endif
 
 	{
@@ -125,7 +154,7 @@ VERTEX_SHADER_CODE
 	}
 
 #if !defined(SKIP_TRANSFORM_USED)
-	outvec = extra_matrix * outvec;
+	outvec = extra_matrix_instance * outvec;
 	outvec = modelview_matrix * outvec;
 #endif
 
@@ -133,8 +162,38 @@ VERTEX_SHADER_CODE
 
 #ifdef USE_PIXEL_SNAP
 	outvec.xy = floor(outvec + 0.5).xy;
+	// precision issue on some hardware creates artifacts within texture
+	// offset uv by a small amount to avoid
+	uv += 1e-5;
 #endif
 
+#ifdef USE_SKELETON
+
+	// look up transform from the "pose texture"
+	if (bone_weights != vec4(0.0)) {
+
+		highp mat4 bone_transform = mat4(0.0);
+
+		for (int i = 0; i < 4; i++) {
+			ivec2 tex_ofs = ivec2(int(bone_indices[i]) * 2, 0);
+
+			highp mat4 b = mat4(
+					texel2DFetch(skeleton_texture, skeleton_texture_size, tex_ofs + ivec2(0, 0)),
+					texel2DFetch(skeleton_texture, skeleton_texture_size, tex_ofs + ivec2(1, 0)),
+					vec4(0.0, 0.0, 1.0, 0.0),
+					vec4(0.0, 0.0, 0.0, 1.0));
+
+			bone_transform += b * bone_weights[i];
+		}
+
+		mat4 bone_matrix = skeleton_transform * transpose(bone_transform) * skeleton_transform_inverse;
+
+		outvec = bone_matrix * outvec;
+	}
+
+#endif
+
+	uv_interp = uv;
 	gl_Position = projection_matrix * outvec;
 
 #ifdef USE_LIGHTING
@@ -161,13 +220,37 @@ VERTEX_SHADER_CODE
 /* clang-format off */
 [fragment]
 
+// texture2DLodEXT and textureCubeLodEXT are fragment shader specific.
+// Do not copy these defines in the vertex section.
+#ifndef USE_GLES_OVER_GL
+#ifdef GL_EXT_shader_texture_lod
+#extension GL_EXT_shader_texture_lod : enable
+#define texture2DLod(img, coord, lod) texture2DLodEXT(img, coord, lod)
+#define textureCubeLod(img, coord, lod) textureCubeLodEXT(img, coord, lod)
+#endif
+#endif // !USE_GLES_OVER_GL
+
+#ifdef GL_ARB_shader_texture_lod
+#extension GL_ARB_shader_texture_lod : enable
+#endif
+
+#if !defined(GL_EXT_shader_texture_lod) && !defined(GL_ARB_shader_texture_lod)
+#define texture2DLod(img, coord, lod) texture2D(img, coord, lod)
+#define textureCubeLod(img, coord, lod) textureCube(img, coord, lod)
+#endif
+
 #ifdef USE_GLES_OVER_GL
 #define lowp
 #define mediump
 #define highp
 #else
+#if defined(USE_HIGHP_PRECISION)
+precision highp float;
+precision highp int;
+#else
 precision mediump float;
 precision mediump int;
+#endif
 #endif
 
 uniform sampler2D color_texture; // texunit:-1
@@ -184,7 +267,7 @@ uniform vec4 final_modulate;
 
 #ifdef SCREEN_TEXTURE_USED
 
-uniform sampler2D screen_texture; // texunit:-3
+uniform sampler2D screen_texture; // texunit:-4
 
 #endif
 
@@ -208,7 +291,7 @@ uniform highp float light_height;
 uniform highp float light_outside_alpha;
 uniform highp float shadow_distance_mult;
 
-uniform lowp sampler2D light_texture; // texunit:-3
+uniform lowp sampler2D light_texture; // texunit:-4
 varying vec4 light_uv_interp;
 varying vec2 transformed_light_uv;
 
@@ -216,7 +299,7 @@ varying vec4 local_rot;
 
 #ifdef USE_SHADOWS
 
-uniform highp sampler2D shadow_texture; // texunit:-4
+uniform highp sampler2D shadow_texture; // texunit:-5
 varying highp vec2 pos;
 
 #endif
@@ -234,13 +317,43 @@ FRAGMENT_SHADER_GLOBALS
 
 /* clang-format on */
 
+void light_compute(
+		inout vec4 light,
+		inout vec2 light_vec,
+		inout float light_height,
+		inout vec4 light_color,
+		vec2 light_uv,
+		inout vec4 shadow_color,
+		vec3 normal,
+		vec2 uv,
+#if defined(SCREEN_UV_USED)
+		vec2 screen_uv,
+#endif
+		vec4 color) {
+
+#if defined(USE_LIGHT_SHADER_CODE)
+
+	/* clang-format off */
+
+LIGHT_SHADER_CODE
+
+	/* clang-format on */
+
+#endif
+}
+
 void main() {
 
 	vec4 color = color_interp;
+	vec2 uv = uv_interp;
+#ifdef USE_FORCE_REPEAT
+	//needs to use this to workaround GLES2/WebGL1 forcing tiling that textures that dont support it
+	uv = mod(uv, vec2(1.0, 1.0));
+#endif
 
 #if !defined(COLOR_USED)
 	//default behavior, texture by color
-	color *= texture2D(color_texture, uv_interp);
+	color *= texture2D(color_texture, uv);
 #endif
 
 #ifdef SCREEN_UV_USED
@@ -257,7 +370,7 @@ void main() {
 #endif
 
 	if (use_default_normal) {
-		normal.xy = texture2D(normal_texture, uv_interp).xy * 2.0 - 1.0;
+		normal.xy = texture2D(normal_texture, uv).xy * 2.0 - 1.0;
 		normal.z = sqrt(1.0 - dot(normal.xy, normal.xy));
 		normal_used = true;
 	} else {
@@ -332,7 +445,10 @@ FRAGMENT_SHADER_CODE
 		color *= light;
 
 #ifdef USE_SHADOWS
-		light_vec = light_uv_interp.zw; //for shadows
+		// Reset light_vec to compute shadows, the shadow map is created from the light origin, so it only
+		// makes sense to compute shadows from there.
+		light_vec = light_uv_interp.zw;
+
 		float angle_to_light = -atan(light_vec.x, light_vec.y);
 		float PI = 3.14159265358979323846264;
 		/*int i = int(mod(floor((angle_to_light+7.0*PI/6.0)/(4.0*PI/6.0))+1.0, 3.0)); // +1 pq os indices estao em ordem 2,0,1 nos arrays
@@ -369,7 +485,7 @@ FRAGMENT_SHADER_CODE
 
 #ifdef USE_RGBA_SHADOWS
 
-#define SHADOW_DEPTH(m_tex, m_uv) dot(texture2D((m_tex), (m_uv)), vec4(1.0 / (256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0), 1.0 / 256.0, 1))
+#define SHADOW_DEPTH(m_tex, m_uv) dot(texture2D((m_tex), (m_uv)), vec4(1.0 / (256.0 * 256.0 * 256.0), 1.0 / (256.0 * 256.0), 1.0 / 256.0, 1.0))
 
 #else
 
@@ -379,19 +495,14 @@ FRAGMENT_SHADER_CODE
 
 #ifdef SHADOW_USE_GRADIENT
 
-#define SHADOW_TEST(m_ofs)                                                    \
-	{                                                                         \
-		highp float sd = SHADOW_DEPTH(shadow_texture, vec2(m_ofs, sh));       \
-		shadow_attenuation += 1.0 - smoothstep(sd, sd + shadow_gradient, sz); \
-	}
+		/* clang-format off */
+		/* GLSL es 100 doesn't support line continuation characters(backslashes) */
+#define SHADOW_TEST(m_ofs) { highp float sd = SHADOW_DEPTH(shadow_texture, vec2(m_ofs, sh)); shadow_attenuation += 1.0 - smoothstep(sd, sd + shadow_gradient, sz); }
 
 #else
 
-#define SHADOW_TEST(m_ofs)                                              \
-	{                                                                   \
-		highp float sd = SHADOW_DEPTH(shadow_texture, vec2(m_ofs, sh)); \
-		shadow_attenuation += step(sz, sd);                             \
-	}
+#define SHADOW_TEST(m_ofs) { highp float sd = SHADOW_DEPTH(shadow_texture, vec2(m_ofs, sh)); shadow_attenuation += step(sz, sd); }
+		/* clang-format on */
 
 #endif
 

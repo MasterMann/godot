@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -57,6 +57,9 @@
 #define LOWERCASE(m_c) (((m_c) >= 'A' && (m_c) <= 'Z') ? ((m_c) + ('a' - 'A')) : (m_c))
 #define IS_DIGIT(m_d) ((m_d) >= '0' && (m_d) <= '9')
 #define IS_HEX_DIGIT(m_d) (((m_d) >= '0' && (m_d) <= '9') || ((m_d) >= 'a' && (m_d) <= 'f') || ((m_d) >= 'A' && (m_d) <= 'F'))
+
+const char CharString::_null = 0;
+const CharType String::_null = 0;
 
 bool is_symbol(CharType c) {
 	return c != '_' && ((c >= '!' && c <= '/') || (c >= ':' && c <= '@') || (c >= '[' && c <= '`') || (c >= '{' && c <= '~') || c == '\t' || c == ' ');
@@ -600,13 +603,13 @@ String String::camelcase_to_underscore(bool lowercase) const {
 			is_next_number = cstr[i + 1] >= '0' && cstr[i + 1] <= '9';
 		}
 
-		const bool a = is_upper && !was_precedent_upper && !was_precedent_number;
-		const bool b = was_precedent_upper && is_upper && are_next_2_lower;
-		const bool c = is_number && !was_precedent_number;
+		const bool cond_a = is_upper && !was_precedent_upper && !was_precedent_number;
+		const bool cond_b = was_precedent_upper && is_upper && are_next_2_lower;
+		const bool cond_c = is_number && !was_precedent_number;
 		const bool can_break_number_letter = is_number && !was_precedent_number && is_next_lower;
 		const bool can_break_letter_number = !is_number && was_precedent_number && (is_next_lower || is_next_number);
 
-		bool should_split = a || b || c || can_break_number_letter || can_break_letter_number;
+		bool should_split = cond_a || cond_b || cond_c || can_break_number_letter || can_break_letter_number;
 		if (should_split) {
 			new_string += this->substr(start_index, i - start_index) + "_";
 			start_index = i;
@@ -1355,6 +1358,9 @@ String String::utf8(const char *p_utf8, int p_len) {
 bool String::parse_utf8(const char *p_utf8, int p_len) {
 
 #define _UNICERROR(m_err) print_line("Unicode error: " + String(m_err));
+
+	if (!p_utf8)
+		return true;
 
 	String aux;
 
@@ -2390,6 +2396,10 @@ int String::find(const char *p_str, int p_from) const {
 	return -1;
 }
 
+int String::find_char(const CharType &p_char, int p_from) const {
+	return _cowdata.find(p_char, p_from);
+}
+
 int String::findmk(const Vector<String> &p_keys, int p_from, int *r_key) const {
 
 	if (p_from < 0)
@@ -2938,11 +2948,11 @@ String String::left(int p_pos) const {
 
 String String::right(int p_pos) const {
 
-	if (p_pos >= size())
-		return *this;
-
-	if (p_pos < 0)
+	if (p_pos >= length())
 		return "";
+
+	if (p_pos <= 0)
+		return *this;
 
 	return substr(p_pos, (length() - p_pos));
 }
@@ -3060,7 +3070,7 @@ String String::lstrip(const String &p_chars) const {
 
 	for (beg = 0; beg < len; beg++) {
 
-		if (p_chars.find(&ptr()[beg]) == -1)
+		if (p_chars.find_char(get(beg)) == -1)
 			break;
 	}
 
@@ -3077,7 +3087,7 @@ String String::rstrip(const String &p_chars) const {
 
 	for (end = len - 1; end >= 0; end--) {
 
-		if (p_chars.find(&ptr()[end]) == -1)
+		if (p_chars.find_char(get(end)) == -1)
 			break;
 	}
 
@@ -3578,9 +3588,12 @@ bool String::is_valid_integer() const {
 
 bool String::is_valid_hex_number(bool p_with_prefix) const {
 
-	int from = 0;
 	int len = length();
 
+	if (len == 0)
+		return false;
+
+	int from = 0;
 	if (len != 1 && (operator[](0) == '+' || operator[](0) == '-'))
 		from++;
 

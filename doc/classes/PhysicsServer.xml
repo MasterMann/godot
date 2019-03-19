@@ -773,7 +773,7 @@
 			<argument index="1" name="space" type="RID">
 			</argument>
 			<description>
-				Assigns a space to the body (see [method create_space]).
+				Assigns a space to the body (see [method space_create]).
 			</description>
 		</method>
 		<method name="body_set_state">
@@ -884,7 +884,7 @@
 			<argument index="0" name="process_info" type="int" enum="PhysicsServer.ProcessInfo">
 			</argument>
 			<description>
-				Returns an Info defined by the [ProcessInfo] input given.
+				Returns an Info defined by the [enum PhysicsServer.ProcessInfo] input given.
 			</description>
 		</method>
 		<method name="hinge_joint_get_flag" qualifiers="const">
@@ -1594,6 +1594,8 @@
 		</constant>
 		<constant name="SPACE_PARAM_CONSTRAINT_DEFAULT_BIAS" value="7" enum="SpaceParameter">
 			Constant to set/get the default solver bias for all physics constraints. A solver bias is a factor controlling how much two objects "rebound", after violating a constraint, to avoid leaving them in that state because of numerical imprecision.
+		</constant>
+		<constant name="SPACE_PARAM_TEST_MOTION_MIN_CONTACT_DEPTH" value="8" enum="SpaceParameter">
 		</constant>
 		<constant name="BODY_AXIS_LINEAR_X" value="1" enum="BodyAxis">
 		</constant>

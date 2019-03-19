@@ -5,8 +5,8 @@
 /*                           GODOT ENGINE                                */
 /*                      https://godotengine.org                          */
 /*************************************************************************/
-/* Copyright (c) 2007-2018 Juan Linietsky, Ariel Manzur.                 */
-/* Copyright (c) 2014-2018 Godot Engine contributors (cf. AUTHORS.md)    */
+/* Copyright (c) 2007-2019 Juan Linietsky, Ariel Manzur.                 */
+/* Copyright (c) 2014-2019 Godot Engine contributors (cf. AUTHORS.md)    */
 /*                                                                       */
 /* Permission is hereby granted, free of charge, to any person obtaining */
 /* a copy of this software and associated documentation files (the       */
@@ -517,7 +517,7 @@ bool GridMap::_octant_update(const OctantKey &p_key) {
 		Ref<NavigationMesh> navmesh = mesh_library->get_item_navmesh(c.item);
 		if (navmesh.is_valid()) {
 			Octant::NavMesh nm;
-			nm.xform = xform;
+			nm.xform = xform * mesh_library->get_item_navmesh_transform(c.item);
 
 			if (navigation) {
 				nm.id = navigation->navmesh_add(navmesh, xform, this);
